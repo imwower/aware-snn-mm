@@ -133,18 +133,24 @@ class CoreGrowthManager:
         device = next(core_model.parameters()).device
         keep_idx = keep_idx.to(device)
 
-        core_model.vis_proj = torch.nn.Linear(core_model.vis_proj.in_features, keep_idx.numel(), bias=False)
-        core_model.vis_proj.weight.data.copy_(core_model.vis_proj.weight.data[keep_idx])
+        # cache old weights before rebuild
+        old_vis_w = core_model.vis_proj.weight.data.clone()
+        old_txt_w = core_model.text_proj.weight.data.clone()
+        old_rec = core_model.recurrent
+        old_cls_w = core_model.classifier.weight.data.clone()
+
+        core_model.vis_proj = torch.nn.Linear(old_vis_w.shape[1], keep_idx.numel(), bias=False)
+        core_model.vis_proj.weight.data.copy_(old_vis_w[keep_idx])
         core_model.vis_proj.weight.requires_grad = False
 
-        core_model.text_proj = torch.nn.Linear(core_model.text_proj.in_features, keep_idx.numel(), bias=False)
-        core_model.text_proj.weight.data.copy_(core_model.text_proj.weight.data[keep_idx])
+        core_model.text_proj = torch.nn.Linear(old_txt_w.shape[1], keep_idx.numel(), bias=False)
+        core_model.text_proj.weight.data.copy_(old_txt_w[keep_idx])
         core_model.text_proj.weight.requires_grad = False
 
-        core_model.recurrent = _shrink_linear(core_model.recurrent, keep_idx)
+        core_model.recurrent = _shrink_linear(old_rec, keep_idx)
 
         new_cls = torch.nn.Linear(keep_idx.numel(), core_model.num_classes, bias=False)
-        new_cls.weight.data.copy_(core_model.classifier.weight.data[:, keep_idx])
+        new_cls.weight.data.copy_(old_cls_w[:, keep_idx])
         new_cls.weight.requires_grad = False
         core_model.classifier = new_cls
 

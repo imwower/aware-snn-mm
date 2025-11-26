@@ -2,6 +2,7 @@ import argparse
 from typing import Dict
 
 import torch
+import yaml
 from torch.utils.data import DataLoader
 
 from snnmm.datasets.cifar100 import CIFAR100Dataset
@@ -16,6 +17,7 @@ from snnmm.models.vision_path import VisionMultiStageSNN
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Reward-modulated STDP training for CIFAR-100 classification.")
+    parser.add_argument("--config", type=str, default=None, help="YAML config path.")
     parser.add_argument("--data-root", type=str, default="data/cifar-100-python")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=32)
@@ -28,7 +30,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit-steps", type=int, default=10)
     parser.add_argument("--surprise-alpha", type=float, default=0.7)
     parser.add_argument("--surprise-beta", type=float, default=0.3)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.config:
+        with open(args.config, "r") as f:
+            cfg = yaml.safe_load(f)
+        for k, v in cfg.items():
+            key = k.replace("-", "_")
+            if hasattr(args, key):
+                setattr(args, key, v)
+    return args
 
 
 def choose_device(flag: str) -> torch.device:

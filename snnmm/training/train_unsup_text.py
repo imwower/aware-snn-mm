@@ -2,6 +2,7 @@ import argparse
 from typing import Dict
 
 import torch
+import yaml
 from torch.utils.data import DataLoader
 
 from snnmm.datasets.cifar100 import CIFAR100Dataset
@@ -12,6 +13,7 @@ from snnmm.models.text_path import LabelSNN
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Unsupervised STDP training for label/text SNN.")
+    parser.add_argument("--config", type=str, default=None, help="YAML config path.")
     parser.add_argument("--data-root", type=str, default="data/cifar-100-python")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=128)
@@ -34,7 +36,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--use-third-layer", action="store_true")
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--semantic-size", type=int, default=128)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.config:
+        with open(args.config, "r") as f:
+            cfg = yaml.safe_load(f)
+        for k, v in cfg.items():
+            if hasattr(args, k.replace("-", "_")):
+                setattr(args, k.replace("-", "_"), v)
+    return args
 
 
 def choose_device(device_flag: str) -> torch.device:

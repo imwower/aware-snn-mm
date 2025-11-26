@@ -87,14 +87,15 @@ class CoreGrowthManager:
         if current_dim >= self.max_dim or len(self.buffer) < self.grow_buffer:
             return False
         grow_n = min(self.grow_batch, self.max_dim - current_dim)
-        cluster = torch.cat(self.buffer, dim=0).mean(dim=0)  # (D,)
         device = next(core_model.parameters()).device
-        init_rows = cluster.unsqueeze(0).repeat(grow_n, 1).to(device)
+        # initialize new rows for projections with small random
+        init_vis_rows = torch.randn(grow_n, core_model.vis_proj.in_features, device=device) * 0.01
+        init_txt_rows = torch.randn(grow_n, core_model.text_proj.in_features, device=device) * 0.01
         # Expand projections
-        core_model.vis_proj = _expand_linear_out(core_model.vis_proj, grow_n, torch.zeros_like(init_rows))
-        core_model.text_proj = _expand_linear_out(core_model.text_proj, grow_n, torch.zeros_like(init_rows))
+        core_model.vis_proj = _expand_linear_out(core_model.vis_proj, grow_n, init_vis_rows)
+        core_model.text_proj = _expand_linear_out(core_model.text_proj, grow_n, init_txt_rows)
         # Expand recurrent
-        init_block = torch.zeros(grow_n, grow_n, device=device)
+        init_block = torch.eye(grow_n, device=device) * 0.01
         core_model.recurrent = _expand_linear_out_in(core_model.recurrent, grow_n, init_block)
         # Expand classifier columns
         old_cls = core_model.classifier.weight.data

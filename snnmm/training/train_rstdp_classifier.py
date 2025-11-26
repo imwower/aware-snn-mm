@@ -147,9 +147,24 @@ def main() -> None:
     dataloader = prepare_dataloader(args)
     traces = init_traces(core, device)
 
+    import os
+    os.makedirs("checkpoints", exist_ok=True)
+
     for epoch in range(1, args.epochs + 1):
         print(f"=== R-STDP Epoch {epoch}/{args.epochs} ===")
         train_epoch(vision, text_model, core, dataloader, device, args, traces)
+        ckpt_path = os.path.join("checkpoints", f"rstdp_epoch{epoch}.pt")
+        torch.save(
+            {
+                "vision": vision.state_dict(),
+                "text_model": text_model.state_dict(),
+                "core": core.state_dict(),
+                "gates": {k: v.detach().cpu() for k, v in vision.get_gates().items()},
+                "epoch": epoch,
+            },
+            ckpt_path,
+        )
+        print(f"[LOG] Saved checkpoint to {ckpt_path}")
 
 
 if __name__ == "__main__":

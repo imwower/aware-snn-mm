@@ -22,7 +22,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--a-minus", type=float, default=0.01)
     parser.add_argument("--tau-pre", type=float, default=20.0)
     parser.add_argument("--tau-post", type=float, default=20.0)
-    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        help="auto | cuda | mps | cpu; auto prefers CUDA, then MPS on Apple Silicon, else CPU.",
+    )
     parser.add_argument("--limit-steps", type=int, default=None, help="Optional number of steps per epoch.")
     parser.add_argument("--timesteps-max-rate", type=float, default=1.0, help="Max spike rate for encoding.")
     parser.add_argument("--use-second-layer", action="store_true", help="Enable second LIF layer.")
@@ -125,9 +130,19 @@ def train_epoch(
         )
 
 
+def choose_device(device_flag: str) -> torch.device:
+    if device_flag != "auto":
+        return torch.device(device_flag)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 def main() -> None:
     args = parse_args()
-    device = torch.device(args.device if torch.cuda.is_available() and args.device == "cuda" else "cpu")
+    device = choose_device(args.device)
     model = VisionSNNStage1(use_second_layer=args.use_second_layer).to(device)
     dataloader = prepare_dataloader(args)
 
@@ -138,4 +153,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

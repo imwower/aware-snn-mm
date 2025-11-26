@@ -1,0 +1,13 @@
+data_root: data/cifar-100-python
+batch_size: 128
+num_workers: 2
+timesteps: 20
+high_rate: 0.9
+low_rate: 0.01
+hidden_size: 128
+semantic_size: 128
+lr: 0.001
+a_plus: 0.01
+a_minus: 0.01
+tau_pre: 20.0
+tau_post: 20.0

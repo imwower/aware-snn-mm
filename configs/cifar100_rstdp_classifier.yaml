@@ -1,0 +1,15 @@
+data_root: data/cifar-100-python
+batch_size: 32
+num_workers: 2
+timesteps: 20
+cycle_length: 10
+lr_core: 0.001
+lr_cls: 0.001
+surprise_alpha: 0.7
+surprise_beta: 0.3
+growth_buffer: 32
+growth_batch: 8
+grow_surprise_thresh: 0.6
+prune_activity_thresh: 0.001
+prune_min_dim: 64
+max_core_dim: 256

@@ -1,9 +1,10 @@
 from typing import Dict, Optional, Tuple
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
+from snnmm.layers.growth import CoreGrowthManager
 from snnmm.layers.neurons import LIFNeuron
 from snnmm.layers.oscillation import mean_over_cycles
 from snnmm.layers.stdp import rstdp_update_linear
@@ -37,6 +38,7 @@ class AwarenessCoreSNN(nn.Module):
 
         self.classifier = nn.Linear(core_dim, num_classes, bias=False)
         self.class_neuron = LIFNeuron(threshold=threshold, decay=decay)
+        self.growth_manager: Optional[CoreGrowthManager] = None
 
         self._init_weights()
         for p in self.parameters():
@@ -102,9 +104,12 @@ class AwarenessCoreSNN(nn.Module):
         z_vis = vis_tensor.mean(dim=0)
         z_text = text_tensor.mean(dim=0)
 
-        # per-cycle statistics if needed externally
-        core_cycles = mean_over_cycles(core_tensor, cycle_length)
-        class_cycles = mean_over_cycles(class_tensor, cycle_length)
+        if self.growth_manager is not None:
+            # placeholder surprise zeros; real surprise computed outside
+            self.growth_manager.accumulate_sample_stats(z_core, torch.zeros(z_core.shape[0]))
+
+        _ = mean_over_cycles(core_tensor, cycle_length)
+        _ = mean_over_cycles(class_tensor, cycle_length)
 
         return z_core, z_vis, z_text, class_tensor
 
@@ -148,3 +153,6 @@ class AwarenessCoreSNN(nn.Module):
         # add small noise scaled by surprise mean to encourage exploration
         delta += scale * surprise.mean().item() * (torch.rand(num_experts) - 0.5)
         return delta
+
+    def attach_growth_manager(self, manager: CoreGrowthManager) -> None:
+        self.growth_manager = manager

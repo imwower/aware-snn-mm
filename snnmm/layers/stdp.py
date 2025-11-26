@@ -79,3 +79,44 @@ def stdp_update_conv(
         weight += lr * dw
         update_norm = dw.norm().item()
     return pre_trace, post_trace, update_norm
+
+
+def rstdp_update_linear(
+    weight: torch.Tensor,
+    eligibility: torch.Tensor,
+    pre_trace: torch.Tensor,
+    post_trace: torch.Tensor,
+    pre_spikes: torch.Tensor,
+    post_spikes: torch.Tensor,
+    reward: float,
+    lr: float = 1e-3,
+    tau_e: float = 50.0,
+    tau_pre: float = 20.0,
+    tau_post: float = 20.0,
+    a_plus: float = 0.01,
+    a_minus: float = 0.01,
+) -> tuple:
+    """
+    Reward-modulated STDP for linear layer weights.
+
+    Args:
+        weight: (out, in)
+        eligibility: same shape as weight, decays over time.
+        pre_trace/post_trace: traces for timing.
+        pre_spikes: (B, in), post_spikes: (B, out)
+        reward: scalar reward to apply at update step.
+    Returns:
+        updated eligibility, pre_trace, post_trace, update_norm.
+    """
+    with torch.no_grad():
+        pre_trace = _decay(pre_trace, tau_pre) + pre_spikes.float().mean(dim=0)
+        post_trace = _decay(post_trace, tau_post) + post_spikes.float().mean(dim=0)
+
+        dw_plus = a_plus * torch.outer(post_spikes.float().mean(dim=0), pre_trace)
+        dw_minus = a_minus * torch.outer(post_trace, pre_spikes.float().mean(dim=0))
+        delta_e = dw_plus - dw_minus
+
+        eligibility = _decay(eligibility, tau_e) + delta_e
+        weight += lr * reward * eligibility
+        update_norm = (lr * reward * eligibility).norm().item()
+    return eligibility, pre_trace, post_trace, update_norm

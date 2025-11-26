@@ -104,6 +104,7 @@ class CoreGrowthManager:
         new_classifier.weight.data.copy_(new_cls)
         new_classifier.weight.requires_grad = False
         core_model.classifier = new_classifier
+        core_model.to(device)
 
         # Update meta
         core_model.core_dim += grow_n
@@ -153,6 +154,7 @@ class CoreGrowthManager:
         new_cls.weight.data.copy_(old_cls_w[:, keep_idx])
         new_cls.weight.requires_grad = False
         core_model.classifier = new_cls
+        core_model.to(device)
 
         core_model.core_dim = keep_idx.numel()
         self.activity_sum = self.activity_sum[keep_idx.cpu()]

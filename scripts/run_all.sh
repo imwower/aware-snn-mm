@@ -7,8 +7,8 @@ python -m snnmm.training.train_unsup_vision --data-root data/cifar-100-python --
 # Run text unsupervised STDP
 python -m snnmm.training.train_unsup_text --data-root data/cifar-100-python --epochs 1 --batch-size 128 --num-workers 2 --timesteps 20 --high-rate 0.9 --low-rate 0.01
 
-# Placeholder for align core training (if implemented separately)
-# python -m snnmm.training.train_align_core --config configs/cifar100_align_core.yaml
+# Align core (awareness core + gate adjustment)
+python -m snnmm.training.train_align_core --config configs/cifar100_align_core.yaml
 
 # Run R-STDP classifier
 python -m snnmm.training.train_rstdp_classifier --data-root data/cifar-100-python --epochs 1 --batch-size 32 --num-workers 2 --timesteps 20 --cycle-length 10

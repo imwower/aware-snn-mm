@@ -108,10 +108,11 @@ def main():
     parser.add_argument("--timesteps", type=int, default=20)
     parser.add_argument("--num-samples", type=int, default=8, help="Samples to draw for forward pass.")
     parser.add_argument(
-        "--target-layer",
+        "--mode",
         type=str,
         default="classifier",
         choices=["vision_stage1", "vision_stage3", "core", "classifier"],
+        help="Alias of target layer to visualize.",
     )
     parser.add_argument("--device", type=str, default="auto")
     args = parser.parse_args()
@@ -129,9 +130,9 @@ def main():
             timesteps=args.timesteps,
             num_samples=args.num_samples,
             device=device,
-            target_layer=args.target_layer,
+            target_layer=args.mode,
         )
-    plot_raster(spikes, f"Spike Raster ({args.target_layer})", args.save_path)
+    plot_raster(spikes, f"Spike Raster ({args.mode})", args.save_path)
 
 
 if __name__ == "__main__":

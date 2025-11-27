@@ -36,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--use-third-layer", action="store_true")
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--semantic-size", type=int, default=128)
+    parser.add_argument("--threshold", type=float, default=1.0, help="LIF threshold for LabelSNN.")
     args = parser.parse_args()
     if args.config:
         with open(args.config, "r") as f:
@@ -179,6 +180,7 @@ def main() -> None:
         hidden_size=args.hidden_size,
         semantic_size=args.semantic_size,
         use_third=args.use_third_layer,
+        threshold=args.threshold,
     ).to(device)
     dataloader = prepare_dataloader(args)
 

@@ -345,6 +345,31 @@ python -m scripts.visualize_spikes \
 
 # 直接可视化已有 npy 脉冲文件
 python -m scripts.visualize_spikes --spike-file path/to/spikes.npy --save-path logs/spikes.png
+
+# 文本无监督 STDP（高发放率 + 低阈值，激活更高）
+python -m snnmm.training.train_unsup_text \
+  --config configs/cifar100_unsup_text.yaml \
+  --device mps \
+  --epochs 10 \
+  --batch-size 128 \
+  --timesteps 60 \
+  --high-rate 0.98 \
+  --low-rate 0.02 \
+  --lr 0.002 \
+  --use-third-layer \
+  --threshold 0.2
+
+# R-STDP 分类（较长训练）
+python -m snnmm.training.train_rstdp_classifier \
+  --config configs/cifar100_rstdp_classifier.yaml \
+  --device mps \
+  --epochs 20 \
+  --timesteps 60 \
+  --cycle-length 10 \
+  --lr-cls 0.003 \
+  --surprise-alpha 0.5 \
+  --surprise-beta 0.2 \
+  --batch-size 64
 ```
 
 ---

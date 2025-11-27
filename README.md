@@ -370,6 +370,14 @@ python -m snnmm.training.train_rstdp_classifier \
   --surprise-alpha 0.5 \
   --surprise-beta 0.2 \
   --batch-size 64
+
+# 视觉无监督 STDP（延长时间步 + 多轮次）
+python -m snnmm.training.train_unsup_vision \
+  --config configs/cifar100_unsup_vision.yaml \
+  --device mps \
+  --epochs 3 \
+  --timesteps 50 \
+  --batch-size 64
 ```
 
 ---

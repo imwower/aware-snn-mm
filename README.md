@@ -332,6 +332,21 @@ python -m snnmm.training.evaluate --checkpoint path/to/checkpoint.pt
 - 高惊讶 vs 低惊讶样本的神经元激活
 - 意识核生长前后，概念空间的变化（例如用 t-SNE/UMAP 对发放率投影）
 
+用法示例：
+
+```bash
+# 使用 checkpoint 前向采样并可视化指定层的脉冲
+python -m scripts.visualize_spikes \
+  --checkpoint checkpoints/rstdp_epoch1.pt \
+  --mode core \            # 可选：vision_stage1/vision_stage3/core/classifier
+  --save-path logs/spikes_core.png \
+  --timesteps 10 \
+  --num-samples 8
+
+# 直接可视化已有 npy 脉冲文件
+python -m scripts.visualize_spikes --spike-file path/to/spikes.npy --save-path logs/spikes.png
+```
+
 ---
 
 ## 13. 后续扩展方向

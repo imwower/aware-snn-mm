@@ -32,6 +32,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--surprise-beta", type=float, default=0.1)
     parser.add_argument("--threshold-core", type=float, default=0.2)
     parser.add_argument("--threshold-cls", type=float, default=0.2)
+    parser.add_argument("--vision-ckpt", type=str, default=None, help="Optional vision checkpoint to load.")
+    parser.add_argument("--text-ckpt", type=str, default=None, help="Optional text checkpoint to load.")
+    parser.add_argument("--core-ckpt", type=str, default=None, help="Optional core checkpoint to load.")
     args = parser.parse_args()
     if args.config:
         with open(args.config, "r") as f:
@@ -144,12 +147,40 @@ def main() -> None:
     device = choose_device(args.device)
     vision = VisionMultiStageSNN().to(device)
     text_model = LabelSNN().to(device)
+
+    # Load optional checkpoints
+    if args.vision_ckpt and os.path.exists(args.vision_ckpt):
+        ckpt_v = torch.load(args.vision_ckpt, map_location=device)
+        if "vision" in ckpt_v:
+            vision.load_state_dict(ckpt_v["vision"])
+            if "gates" in ckpt_v:
+                for k, v in ckpt_v["gates"].items():
+                    vision.gates[k].data.copy_(v.to(device))
+        print(f"[LOG] Loaded vision ckpt {args.vision_ckpt}")
+
+    if args.text_ckpt and os.path.exists(args.text_ckpt):
+        ckpt_t = torch.load(args.text_ckpt, map_location=device)
+        if "text_model" in ckpt_t:
+            text_model.load_state_dict(ckpt_t["text_model"])
+        print(f"[LOG] Loaded text ckpt {args.text_ckpt}")
+
+    # Build core with possible custom core_dim from ckpt
+    core_dim_override = None
+    if args.core_ckpt and os.path.exists(args.core_ckpt):
+        ckpt_c = torch.load(args.core_ckpt, map_location=device)
+        if "core" in ckpt_c and "classifier.weight" in ckpt_c["core"]:
+            core_dim_override = ckpt_c["core"]["classifier.weight"].shape[1]
     core = AwarenessCoreSNN(
         vis_dim=vision.stage3[0].out_features,
         text_dim=text_model.fc2.out_features,
+        core_dim=core_dim_override or 192,
         threshold_core=args.threshold_core,
         threshold_cls=args.threshold_cls,
     ).to(device)
+    if args.core_ckpt and os.path.exists(args.core_ckpt):
+        if "core" in ckpt_c:
+            core.load_state_dict(ckpt_c["core"])
+        print(f"[LOG] Loaded core ckpt {args.core_ckpt}")
 
     dataloader = prepare_dataloader(args)
     traces = init_traces(core, device)

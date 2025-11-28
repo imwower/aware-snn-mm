@@ -7,6 +7,7 @@ import yaml
 from torch.utils.data import DataLoader
 
 from snnmm.datasets.cifar100 import CIFAR100Dataset
+from snnmm.datasets.cifar10 import CIFAR10Dataset
 from snnmm.encoding.text_encoding import label_poisson_encode
 from snnmm.encoding.vision_encoding import poisson_encode
 from snnmm.layers.gating import update_gates
@@ -46,13 +47,30 @@ def parse_args() -> argparse.Namespace:
         choices=["last", "mean", "max"],
         help="How to aggregate classifier spikes for R-STDP.",
     )
+    parser.add_argument("--dataset-name", type=str, default="cifar100", help="cifar100 or cifar10")
+    parser.add_argument("--num-classes", type=int, default=100)
+    parser.add_argument("--target-spikes-pos", type=float, default=5.0)
+    parser.add_argument("--target-spikes-neg", type=float, default=0.0)
+    parser.add_argument("--debug-mode", type=str, default="normal")
+    parser.add_argument("--use-three-factor-debug", action="store_true")
     args = parser.parse_args()
     if args.config:
         with open(args.config, "r") as f:
             cfg = yaml.safe_load(f)
         for k, v in cfg.items():
             key = k.replace("-", "_")
-            if hasattr(args, key):
+            if key in ("dataset", "rstdp", "train", "sim", "model") and isinstance(v, dict):
+                for sub_k, sub_v in v.items():
+                    sub_key = sub_k.replace("-", "_")
+                    if sub_key == "name" and key == "dataset":
+                        args.dataset_name = sub_v
+                    elif sub_key == "root" and key == "dataset":
+                        args.data_root = sub_v
+                    elif sub_key == "num_classes" and key == "model":
+                        args.num_classes = sub_v
+                    elif hasattr(args, sub_key):
+                        setattr(args, sub_key, sub_v)
+            elif hasattr(args, key):
                 setattr(args, key, v)
     return args
 
@@ -68,7 +86,10 @@ def choose_device(flag: str) -> torch.device:
 
 
 def prepare_dataloader(args: argparse.Namespace) -> DataLoader:
-    dataset = CIFAR100Dataset(root=args.data_root, train=True)
+    if args.dataset_name.lower() == "cifar10":
+        dataset = CIFAR10Dataset(root=args.data_root, train=True)
+    else:
+        dataset = CIFAR100Dataset(root=args.data_root, train=True)
     return DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=False)
 
 
@@ -87,6 +108,35 @@ def compute_reward(pred: torch.Tensor, labels: torch.Tensor, reward_scale: float
     return (base_R * reward_scale).mean().item()
 
 
+def update_readout_three_factor_debug(
+    weight: torch.Tensor,
+    pre_trace: torch.Tensor,
+    post_trace: torch.Tensor,
+    pre_spikes: torch.Tensor,
+    class_spikes: torch.Tensor,
+    target_spikes: torch.Tensor,
+    lr: float,
+    tau_pre: float = 20.0,
+    tau_post: float = 20.0,
+    clip: float = 1.0,
+) -> tuple:
+    """
+    Three-factor rule for readout: error per neuron * pre_trace.
+    weight: (C, H), pre_spikes: (B, H), class_spikes: (T,B,C), target_spikes: (B,C)
+    """
+    with torch.no_grad():
+        pre_trace = pre_trace * (1.0 - 1.0 / tau_pre) + pre_spikes.mean(dim=0)
+        post_trace = post_trace * (1.0 - 1.0 / tau_post) + class_spikes.mean(dim=(0, 1))
+        n_spikes = class_spikes.sum(dim=0)  # (B,C)
+        error = target_spikes - n_spikes  # (B,C)
+        err_mean = error.mean(dim=0)  # (C,)
+        update = lr * err_mean.view(-1, 1) * pre_trace.view(1, -1)
+        weight += update
+        weight.clamp_(-clip, clip)
+        update_norm = update.norm().item()
+    return pre_trace, post_trace, update_norm
+
+
 def train_epoch(
     vision: VisionMultiStageSNN,
     text_model: LabelSNN,
@@ -99,6 +149,7 @@ def train_epoch(
     total = 0
     correct = 0
     surprise_list = []
+    num_classes = 10 if args.dataset_name.lower() == "cifar10" else 100
     for step, batch in enumerate(dataloader, start=1):
         if args.limit_steps is not None and step > args.limit_steps:
             break
@@ -109,7 +160,7 @@ def train_epoch(
 
         # encode
         vis_spikes = poisson_encode(images, timesteps=args.timesteps, max_rate=1.0, flatten=True)
-        text_spikes = label_poisson_encode(labels, timesteps=args.timesteps, n_labels=100, device=device)
+        text_spikes = label_poisson_encode(labels, timesteps=args.timesteps, n_labels=num_classes, device=device)
 
         # forward through vision and text
         h_low, h_mid, h_high = vision(vis_spikes)
@@ -125,27 +176,49 @@ def train_epoch(
         S = core.compute_surprise(cls_spikes, labels, z_vis, z_text, alpha=args.surprise_alpha, beta=args.surprise_beta)
         surprise_list.append(S.mean().item())
 
-        # reward and R-STDP on classifier
-        R = compute_reward(pred, labels, reward_scale=args.reward_scale)
-        pre_spikes = z_core
-        post_spikes = cls_spikes[-1]
-        if args.normalize_core:
-            pre_spikes = pre_spikes / (pre_spikes.norm(dim=1, keepdim=True) + 1e-8)
-        if args.post_agg == "mean":
-            post_spikes = cls_spikes.mean(dim=0)
-        elif args.post_agg == "max":
-            post_spikes = cls_spikes.max(dim=0).values
+        if (
+            args.dataset_name.lower() == "cifar10"
+            and args.debug_mode == "readout_only"
+            and args.use_three_factor_debug
+        ):
+            target = torch.full((labels.shape[0], num_classes), args.target_spikes_neg, device=device)
+            target[torch.arange(labels.shape[0]), labels] = args.target_spikes_pos
+            pre_spikes = z_core
+            if args.normalize_core:
+                pre_spikes = pre_spikes / (pre_spikes.norm(dim=1, keepdim=True) + 1e-8)
+            traces["pre_cls"], traces["post_cls"], upd = update_readout_three_factor_debug(
+                core.classifier.weight,
+                traces["pre_cls"],
+                traces["post_cls"],
+                pre_spikes,
+                cls_spikes,
+                target,
+                lr=args.lr_cls,
+            )
+            update_norm = upd
+        else:
+            # reward and R-STDP on classifier
+            R = compute_reward(pred, labels, reward_scale=args.reward_scale)
+            pre_spikes = z_core
+            post_spikes = cls_spikes[-1]
+            if args.normalize_core:
+                pre_spikes = pre_spikes / (pre_spikes.norm(dim=1, keepdim=True) + 1e-8)
+            if args.post_agg == "mean":
+                post_spikes = cls_spikes.mean(dim=0)
+            elif args.post_agg == "max":
+                post_spikes = cls_spikes.max(dim=0).values
 
-        traces["elig_cls"], traces["pre_cls"], traces["post_cls"], upd = rstdp_update_linear(
-            core.classifier.weight,
-            traces["elig_cls"],
-            traces["pre_cls"],
-            traces["post_cls"],
-            pre_spikes=pre_spikes,
-            post_spikes=post_spikes,
-            reward=R,
-            lr=args.lr_cls,
-        )
+            traces["elig_cls"], traces["pre_cls"], traces["post_cls"], upd = rstdp_update_linear(
+                core.classifier.weight,
+                traces["elig_cls"],
+                traces["pre_cls"],
+                traces["post_cls"],
+                pre_spikes=pre_spikes,
+                post_spikes=post_spikes,
+                reward=R,
+                lr=args.lr_cls,
+            )
+            update_norm = upd
 
         # gate updates suggestion (vision stage3 as example)
         if not args.freeze_gates:
@@ -157,16 +230,22 @@ def train_epoch(
             acc = correct / total if total > 0 else 0.0
             mean_S = sum(surprise_list) / len(surprise_list)
             g3 = vision.gates["stage3"].detach().cpu().numpy().tolist()
+            w_mean = core.classifier.weight.mean().item()
+            w_std = core.classifier.weight.std().item()
+            mean_spk = cls_spikes.sum(dim=0).mean().item()
+            log_prefix = "CIFAR10-RSTDP" if args.dataset_name.lower() == "cifar10" else "RSTDP"
             print(
-                f"[LOG] RSTDP Ep step {step}, acc={acc:.3f}, mean_S={mean_S:.3f}, g_stage3={g3[:4]}..."
+                f"[LOG] {log_prefix} Ep step {step}, acc={acc:.3f}, mean_S={mean_S:.3f}, "
+                f"mean_spikes={mean_spk:.3f}, w_mean={w_mean:.4f}, w_std={w_std:.4f}, g_stage3={g3[:4]}..."
             )
 
 
 def main() -> None:
     args = parse_args()
     device = choose_device(args.device)
+    num_classes = 10 if args.dataset_name.lower() == "cifar10" else args.num_classes
     vision = VisionMultiStageSNN().to(device)
-    text_model = LabelSNN().to(device)
+    text_model = LabelSNN(n_labels=num_classes).to(device)
 
     # Load optional checkpoints
     if args.vision_ckpt and os.path.exists(args.vision_ckpt):
@@ -194,6 +273,7 @@ def main() -> None:
         vis_dim=vision.stage3[0].out_features,
         text_dim=text_model.fc2.out_features,
         core_dim=core_dim_override or 192,
+        num_classes=num_classes,
         threshold_core=args.threshold_core,
         threshold_cls=args.threshold_cls,
     ).to(device)

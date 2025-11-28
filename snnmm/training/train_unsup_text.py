@@ -6,6 +6,7 @@ import yaml
 from torch.utils.data import DataLoader
 
 from snnmm.datasets.cifar100 import CIFAR100Dataset
+from snnmm.datasets.cifar10 import CIFAR10Dataset
 from snnmm.encoding.text_encoding import label_poisson_encode
 from snnmm.layers.stdp import stdp_update_linear
 from snnmm.models.text_path import LabelSNN
@@ -37,13 +38,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--semantic-size", type=int, default=128)
     parser.add_argument("--threshold", type=float, default=1.0, help="LIF threshold for LabelSNN.")
+    parser.add_argument("--dataset-name", type=str, default="cifar100", help="cifar100 or cifar10")
     args = parser.parse_args()
     if args.config:
         with open(args.config, "r") as f:
             cfg = yaml.safe_load(f)
         for k, v in cfg.items():
-            if hasattr(args, k.replace("-", "_")):
-                setattr(args, k.replace("-", "_"), v)
+            key = k.replace("-", "_")
+            if key == "dataset" and isinstance(v, dict):
+                if "name" in v:
+                    args.dataset_name = v["name"]
+                if "root" in v:
+                    args.data_root = v["root"]
+            elif hasattr(args, key):
+                setattr(args, key, v)
     return args
 
 
@@ -58,7 +66,10 @@ def choose_device(device_flag: str) -> torch.device:
 
 
 def prepare_dataloader(args: argparse.Namespace) -> DataLoader:
-    dataset = CIFAR100Dataset(root=args.data_root, train=True)
+    if args.dataset_name.lower() == "cifar10":
+        dataset = CIFAR10Dataset(root=args.data_root, train=True)
+    else:
+        dataset = CIFAR100Dataset(root=args.data_root, train=True)
     return DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -175,8 +186,9 @@ def train_epoch(model: LabelSNN, dataloader: DataLoader, device: torch.device, a
 def main() -> None:
     args = parse_args()
     device = choose_device(args.device)
+    n_labels = 10 if args.dataset_name.lower() == "cifar10" else 100
     model = LabelSNN(
-        n_labels=100,
+        n_labels=n_labels,
         hidden_size=args.hidden_size,
         semantic_size=args.semantic_size,
         use_third=args.use_third_layer,

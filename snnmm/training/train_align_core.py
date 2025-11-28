@@ -6,6 +6,7 @@ import yaml
 from torch.utils.data import DataLoader
 
 from snnmm.datasets.cifar100 import CIFAR100Dataset
+from snnmm.datasets.cifar10 import CIFAR10Dataset
 from snnmm.encoding.text_encoding import label_poisson_encode
 from snnmm.encoding.vision_encoding import poisson_encode
 from snnmm.layers.gating import update_gates
@@ -36,6 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-core-dim", type=int, default=256)
     parser.add_argument("--threshold-core", type=float, default=0.5)
     parser.add_argument("--threshold-cls", type=float, default=0.5)
+    parser.add_argument("--dataset-name", type=str, default="cifar100")
     args = parser.parse_args()
     if args.config:
         with open(args.config, "r") as f:
@@ -44,6 +46,11 @@ def parse_args() -> argparse.Namespace:
             key = k.replace("-", "_")
             if hasattr(args, key):
                 setattr(args, key, v)
+            if key == "dataset" and isinstance(v, dict):
+                if "name" in v:
+                    args.dataset_name = v["name"]
+                if "root" in v:
+                    args.data_root = v["root"]
     return args
 
 
@@ -58,7 +65,10 @@ def choose_device(flag: str) -> torch.device:
 
 
 def prepare_dataloader(args: argparse.Namespace) -> DataLoader:
-    dataset = CIFAR100Dataset(root=args.data_root, train=True)
+    if args.dataset_name.lower() == "cifar10":
+        dataset = CIFAR10Dataset(root=args.data_root, train=True)
+    else:
+        dataset = CIFAR100Dataset(root=args.data_root, train=True)
     return DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=False)
 
 
@@ -70,6 +80,7 @@ def train_epoch(
     dataloader: DataLoader,
     device: torch.device,
     args: argparse.Namespace,
+    num_classes: int,
 ) -> None:
     for step, batch in enumerate(dataloader, start=1):
         if args.limit_steps is not None and step > args.limit_steps:
@@ -79,7 +90,7 @@ def train_epoch(
         labels = labels.to(device)
 
         vis_spikes = poisson_encode(images, timesteps=args.timesteps, max_rate=1.0, flatten=True)
-        text_spikes = label_poisson_encode(labels, timesteps=args.timesteps, n_labels=100, device=device)
+        text_spikes = label_poisson_encode(labels, timesteps=args.timesteps, n_labels=num_classes, device=device)
 
         h_low, h_mid, h_high = vision(vis_spikes)
         _, h_text_sem = text_model(text_spikes)
@@ -110,11 +121,13 @@ def train_epoch(
 def main() -> None:
     args = parse_args()
     device = choose_device(args.device)
+    num_classes = 10 if args.dataset_name.lower() == "cifar10" else 100
     vision = VisionMultiStageSNN().to(device)
-    text_model = LabelSNN().to(device)
+    text_model = LabelSNN(n_labels=num_classes).to(device)
     core = AwarenessCoreSNN(
         vis_dim=vision.stage3[0].out_features,
         text_dim=text_model.fc2.out_features,
+        num_classes=num_classes,
         threshold_core=args.threshold_core,
         threshold_cls=args.threshold_cls,
     ).to(device)
@@ -132,7 +145,7 @@ def main() -> None:
     dataloader = prepare_dataloader(args)
     for epoch in range(1, args.epochs + 1):
         print(f"=== Align Core Epoch {epoch}/{args.epochs} ===")
-        train_epoch(vision, text_model, core, growth, dataloader, device, args)
+        train_epoch(vision, text_model, core, growth, dataloader, device, args, num_classes)
 
 
 if __name__ == "__main__":

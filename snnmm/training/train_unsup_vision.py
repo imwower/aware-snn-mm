@@ -6,6 +6,7 @@ import yaml
 from torch.utils.data import DataLoader
 
 from snnmm.datasets.cifar100 import CIFAR100Dataset
+from snnmm.datasets.cifar10 import CIFAR10Dataset
 from snnmm.encoding.vision_encoding import poisson_encode
 from snnmm.layers.stdp import stdp_update_linear
 from snnmm.models.vision_path import VisionMultiStageSNN
@@ -38,19 +39,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stage3-size", type=int, default=128)
     parser.add_argument("--threshold", type=float, default=1.0, help="LIF threshold for stage1/2.")
     parser.add_argument("--threshold-stage3", type=float, default=None, help="Optional lower threshold for stage3.")
+    parser.add_argument("--dataset-name", type=str, default="cifar100", help="cifar100 or cifar10")
     args = parser.parse_args()
 
     if args.config:
         with open(args.config, "r") as f:
             cfg = yaml.safe_load(f)
         for k, v in cfg.items():
-            if hasattr(args, k.replace("-", "_")):
-                setattr(args, k.replace("-", "_"), v)
+            key = k.replace("-", "_")
+            if key == "dataset" and isinstance(v, dict):
+                if "name" in v:
+                    args.dataset_name = v["name"]
+                if "root" in v:
+                    args.data_root = v["root"]
+            elif hasattr(args, key):
+                setattr(args, key, v)
     return args
 
 
 def prepare_dataloader(args: argparse.Namespace) -> DataLoader:
-    dataset = CIFAR100Dataset(root=args.data_root, train=True)
+    if args.dataset_name.lower() == "cifar10":
+        dataset = CIFAR10Dataset(root=args.data_root, train=True)
+    else:
+        dataset = CIFAR100Dataset(root=args.data_root, train=True)
     return DataLoader(
         dataset,
         batch_size=args.batch_size,

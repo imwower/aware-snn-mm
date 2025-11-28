@@ -1,0 +1,25 @@
+dataset:
+  name: cifar10
+  root: data
+model:
+  num_classes: 10
+sim:
+  timesteps: 40
+  batch_size: 64
+stdp:
+  a_plus: 0.01
+  a_minus: 0.01
+  tau_pre: 20.0
+  tau_post: 20.0
+rstdp:
+  lr_cls: 0.003
+  target_spikes_pos: 5
+  target_spikes_neg: 0
+  use_three_factor_debug: true
+  use_global_reward: false
+  use_surprise_modulation: false
+train:
+  epochs: 5
+  steps_per_epoch: 500
+  device: mps
+  debug_mode: readout_only

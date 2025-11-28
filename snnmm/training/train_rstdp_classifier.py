@@ -22,16 +22,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-workers", type=int, default=2)
-    parser.add_argument("--timesteps", type=int, default=20)
+    parser.add_argument("--timesteps", type=int, default=60)
     parser.add_argument("--cycle-length", type=int, default=10)
     parser.add_argument("--lr-core", type=float, default=1e-3)
-    parser.add_argument("--lr-cls", type=float, default=1e-3)
+    parser.add_argument("--lr-cls", type=float, default=0.003)
     parser.add_argument("--device", type=str, default="auto")
-    parser.add_argument("--limit-steps", type=int, default=10)
-    parser.add_argument("--surprise-alpha", type=float, default=0.6)
-    parser.add_argument("--surprise-beta", type=float, default=0.2)
-    parser.add_argument("--threshold-core", type=float, default=0.5)
-    parser.add_argument("--threshold-cls", type=float, default=0.5)
+    parser.add_argument("--limit-steps", type=int, default=None)
+    parser.add_argument("--surprise-alpha", type=float, default=0.5)
+    parser.add_argument("--surprise-beta", type=float, default=0.1)
+    parser.add_argument("--threshold-core", type=float, default=0.2)
+    parser.add_argument("--threshold-cls", type=float, default=0.2)
     args = parser.parse_args()
     if args.config:
         with open(args.config, "r") as f:
@@ -69,9 +69,8 @@ def init_traces(core: AwarenessCoreSNN, device: torch.device) -> Dict[str, torch
 def compute_reward(pred: torch.Tensor, labels: torch.Tensor, surprise: torch.Tensor) -> float:
     correct = (pred == labels).float()
     base_R = torch.where(correct > 0, torch.ones_like(correct), -torch.ones_like(correct))
-    # modulate by (1 - surprise)
-    R = (base_R * (1.0 - surprise)).mean().item()
-    return R
+    # 固定奖励，不再被惊讶度衰减
+    return base_R.mean().item()
 
 
 def train_epoch(
@@ -126,9 +125,10 @@ def train_epoch(
         )
 
         # gate updates suggestion (vision stage3 as example)
-        delta_g = core.suggest_gate_delta(S, num_experts=vision.num_experts)
-        new_g = update_gates(vision.gates["stage3"], delta_g.to(device))
-        vision.gates["stage3"].data.copy_(new_g)
+        # 可选：禁用门控扰动，保持均匀
+        # delta_g = core.suggest_gate_delta(S, num_experts=vision.num_experts)
+        # new_g = update_gates(vision.gates["stage3"], delta_g.to(device))
+        # vision.gates["stage3"].data.copy_(new_g)
 
         if step % 5 == 0:
             acc = correct / total if total > 0 else 0.0

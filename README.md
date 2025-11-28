@@ -375,9 +375,12 @@ python -m snnmm.training.train_rstdp_classifier \
 python -m snnmm.training.train_unsup_vision \
   --config configs/cifar100_unsup_vision.yaml \
   --device mps \
-  --epochs 3 \
-  --timesteps 50 \
-  --batch-size 64
+  --epochs 5 \
+  --timesteps 100 \
+  --timesteps-max-rate 1.4 \
+  --batch-size 64 \
+  --threshold 1.0 \
+  --threshold-stage3 0.5
 ```
 
 ---

@@ -76,6 +76,7 @@ class VisionMultiStageSNN(nn.Module):
         num_experts: int = 8,
         threshold: float = 1.0,
         decay: float = 0.95,
+        threshold_stage3: Optional[float] = None,
     ) -> None:
         super().__init__()
         self.num_experts = num_experts
@@ -97,7 +98,8 @@ class VisionMultiStageSNN(nn.Module):
         )
         self.neurons1 = nn.ModuleList([LIFNeuron(threshold=threshold, decay=decay) for _ in range(num_experts)])
         self.neurons2 = nn.ModuleList([LIFNeuron(threshold=threshold, decay=decay) for _ in range(num_experts)])
-        self.neurons3 = nn.ModuleList([LIFNeuron(threshold=threshold, decay=decay) for _ in range(num_experts)])
+        thr3 = threshold if threshold_stage3 is None else threshold_stage3
+        self.neurons3 = nn.ModuleList([LIFNeuron(threshold=thr3, decay=decay) for _ in range(num_experts)])
         self._init_weights()
         for p in self.parameters():
             p.requires_grad = False

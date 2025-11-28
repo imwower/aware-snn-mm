@@ -36,6 +36,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stage1-size", type=int, default=256)
     parser.add_argument("--stage2-size", type=int, default=256)
     parser.add_argument("--stage3-size", type=int, default=128)
+    parser.add_argument("--threshold", type=float, default=1.0, help="LIF threshold for stage1/2.")
+    parser.add_argument("--threshold-stage3", type=float, default=None, help="Optional lower threshold for stage3.")
     args = parser.parse_args()
 
     if args.config:
@@ -209,6 +211,8 @@ def main() -> None:
         stage1_size=args.stage1_size,
         stage2_size=args.stage2_size,
         stage3_size=args.stage3_size,
+        threshold=args.threshold,
+        threshold_stage3=args.threshold_stage3,
     ).to(device)
     dataloader = prepare_dataloader(args)
 

@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--surprise-beta", type=float, default=0.0)
     parser.add_argument("--threshold-core", type=float, default=0.1)
     parser.add_argument("--threshold-cls", type=float, default=0.1)
-    parser.add_argument("--reward-scale", type=float, default=1.0)
+    parser.add_argument("--reward-scale", type=float, default=2.0)
     parser.add_argument("--freeze-gates", action="store_true", help="If set, keep gates uniform during R-STDP.")
     parser.add_argument("--vision-ckpt", type=str, default=None, help="Optional vision checkpoint to load.")
     parser.add_argument("--text-ckpt", type=str, default=None, help="Optional text checkpoint to load.")
@@ -124,7 +124,7 @@ def train_epoch(
             traces["pre_cls"],
             traces["post_cls"],
             pre_spikes=z_core,  # use averaged spikes as pre
-            post_spikes=cls_spikes.mean(dim=0),  # averaged post spikes
+            post_spikes=cls_spikes[-1],  # last timestep spikes for stronger signal
             reward=R,
             lr=args.lr_cls,
         )

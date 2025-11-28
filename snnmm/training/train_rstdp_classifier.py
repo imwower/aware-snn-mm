@@ -22,16 +22,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-workers", type=int, default=2)
-    parser.add_argument("--timesteps", type=int, default=60)
+    parser.add_argument("--timesteps", type=int, default=100)
     parser.add_argument("--cycle-length", type=int, default=10)
     parser.add_argument("--lr-core", type=float, default=1e-3)
-    parser.add_argument("--lr-cls", type=float, default=0.003)
+    parser.add_argument("--lr-cls", type=float, default=0.006)
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument("--limit-steps", type=int, default=None)
-    parser.add_argument("--surprise-alpha", type=float, default=0.5)
-    parser.add_argument("--surprise-beta", type=float, default=0.1)
-    parser.add_argument("--threshold-core", type=float, default=0.2)
-    parser.add_argument("--threshold-cls", type=float, default=0.2)
+    parser.add_argument("--surprise-alpha", type=float, default=0.4)
+    parser.add_argument("--surprise-beta", type=float, default=0.0)
+    parser.add_argument("--threshold-core", type=float, default=0.1)
+    parser.add_argument("--threshold-cls", type=float, default=0.1)
     parser.add_argument("--vision-ckpt", type=str, default=None, help="Optional vision checkpoint to load.")
     parser.add_argument("--text-ckpt", type=str, default=None, help="Optional text checkpoint to load.")
     parser.add_argument("--core-ckpt", type=str, default=None, help="Optional core checkpoint to load.")
@@ -128,10 +128,10 @@ def train_epoch(
         )
 
         # gate updates suggestion (vision stage3 as example)
-        # 可选：禁用门控扰动，保持均匀
-        # delta_g = core.suggest_gate_delta(S, num_experts=vision.num_experts)
-        # new_g = update_gates(vision.gates["stage3"], delta_g.to(device))
-        # vision.gates["stage3"].data.copy_(new_g)
+        # 重新启用门控扰动，鼓励探索
+        delta_g = core.suggest_gate_delta(S, num_experts=vision.num_experts, scale=0.2)
+        new_g = update_gates(vision.gates["stage3"], delta_g.to(device))
+        vision.gates["stage3"].data.copy_(new_g)
 
         if step % 5 == 0:
             acc = correct / total if total > 0 else 0.0

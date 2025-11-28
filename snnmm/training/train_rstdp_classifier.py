@@ -30,6 +30,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit-steps", type=int, default=10)
     parser.add_argument("--surprise-alpha", type=float, default=0.7)
     parser.add_argument("--surprise-beta", type=float, default=0.3)
+    parser.add_argument("--threshold-core", type=float, default=0.5)
+    parser.add_argument("--threshold-cls", type=float, default=0.5)
     args = parser.parse_args()
     if args.config:
         with open(args.config, "r") as f:
@@ -142,7 +144,12 @@ def main() -> None:
     device = choose_device(args.device)
     vision = VisionMultiStageSNN().to(device)
     text_model = LabelSNN().to(device)
-    core = AwarenessCoreSNN(vis_dim=vision.stage3[0].out_features, text_dim=text_model.fc2.out_features).to(device)
+    core = AwarenessCoreSNN(
+        vis_dim=vision.stage3[0].out_features,
+        text_dim=text_model.fc2.out_features,
+        threshold_core=args.threshold_core,
+        threshold_cls=args.threshold_cls,
+    ).to(device)
 
     dataloader = prepare_dataloader(args)
     traces = init_traces(core, device)

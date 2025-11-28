@@ -34,6 +34,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prune-activity-thresh", type=float, default=1e-3)
     parser.add_argument("--prune-min-dim", type=int, default=64)
     parser.add_argument("--max-core-dim", type=int, default=256)
+    parser.add_argument("--threshold-core", type=float, default=0.5)
+    parser.add_argument("--threshold-cls", type=float, default=0.5)
     args = parser.parse_args()
     if args.config:
         with open(args.config, "r") as f:
@@ -110,7 +112,12 @@ def main() -> None:
     device = choose_device(args.device)
     vision = VisionMultiStageSNN().to(device)
     text_model = LabelSNN().to(device)
-    core = AwarenessCoreSNN(vis_dim=vision.stage3[0].out_features, text_dim=text_model.fc2.out_features).to(device)
+    core = AwarenessCoreSNN(
+        vis_dim=vision.stage3[0].out_features,
+        text_dim=text_model.fc2.out_features,
+        threshold_core=args.threshold_core,
+        threshold_cls=args.threshold_cls,
+    ).to(device)
     growth = CoreGrowthManager(
         init_dim=core.core_dim,
         grow_buffer=args.growth_buffer,

@@ -22,7 +22,9 @@ class AwarenessCoreSNN(nn.Module):
         text_dim: int,
         core_dim: int = 192,
         num_classes: int = 100,
-        threshold: float = 1.0,
+        threshold: Optional[float] = None,
+        threshold_core: float = 0.5,
+        threshold_cls: float = 0.5,
         decay: float = 0.95,
     ) -> None:
         super().__init__()
@@ -30,14 +32,17 @@ class AwarenessCoreSNN(nn.Module):
         self.text_dim = text_dim
         self.core_dim = core_dim
         self.num_classes = num_classes
+        if threshold is not None:
+            threshold_core = threshold
+            threshold_cls = threshold
 
         self.vis_proj = nn.Linear(vis_dim, core_dim, bias=False)
         self.text_proj = nn.Linear(text_dim, core_dim, bias=False)
         self.recurrent = nn.Linear(core_dim, core_dim, bias=False)
-        self.core_neuron = LIFNeuron(threshold=threshold, decay=decay)
+        self.core_neuron = LIFNeuron(threshold=threshold_core, decay=decay)
 
         self.classifier = nn.Linear(core_dim, num_classes, bias=False)
-        self.class_neuron = LIFNeuron(threshold=threshold, decay=decay)
+        self.class_neuron = LIFNeuron(threshold=threshold_cls, decay=decay)
         self.growth_manager: Optional[CoreGrowthManager] = None
 
         self._init_weights()

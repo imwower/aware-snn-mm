@@ -38,6 +38,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vision-ckpt", type=str, default=None, help="Optional vision checkpoint to load.")
     parser.add_argument("--text-ckpt", type=str, default=None, help="Optional text checkpoint to load.")
     parser.add_argument("--core-ckpt", type=str, default=None, help="Optional core checkpoint to load.")
+    parser.add_argument("--normalize-core", action="store_true", help="L2 normalize core spikes before classifier.")
+    parser.add_argument(
+        "--post-agg",
+        type=str,
+        default="last",
+        choices=["last", "mean", "max"],
+        help="How to aggregate classifier spikes for R-STDP.",
+    )
     args = parser.parse_args()
     if args.config:
         with open(args.config, "r") as f:

@@ -32,6 +32,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--surprise-beta", type=float, default=0.0)
     parser.add_argument("--threshold-core", type=float, default=0.1)
     parser.add_argument("--threshold-cls", type=float, default=0.1)
+    parser.add_argument("--reward-scale", type=float, default=1.0)
+    parser.add_argument("--freeze-gates", action="store_true", help="If set, keep gates uniform during R-STDP.")
     parser.add_argument("--vision-ckpt", type=str, default=None, help="Optional vision checkpoint to load.")
     parser.add_argument("--text-ckpt", type=str, default=None, help="Optional text checkpoint to load.")
     parser.add_argument("--core-ckpt", type=str, default=None, help="Optional core checkpoint to load.")
@@ -69,11 +71,11 @@ def init_traces(core: AwarenessCoreSNN, device: torch.device) -> Dict[str, torch
     return traces
 
 
-def compute_reward(pred: torch.Tensor, labels: torch.Tensor, surprise: torch.Tensor) -> float:
+def compute_reward(pred: torch.Tensor, labels: torch.Tensor, reward_scale: float = 1.0) -> float:
     correct = (pred == labels).float()
     base_R = torch.where(correct > 0, torch.ones_like(correct), -torch.ones_like(correct))
     # 固定奖励，不再被惊讶度衰减
-    return base_R.mean().item()
+    return (base_R * reward_scale).mean().item()
 
 
 def train_epoch(
@@ -128,10 +130,10 @@ def train_epoch(
         )
 
         # gate updates suggestion (vision stage3 as example)
-        # 重新启用门控扰动，鼓励探索
-        delta_g = core.suggest_gate_delta(S, num_experts=vision.num_experts, scale=0.2)
-        new_g = update_gates(vision.gates["stage3"], delta_g.to(device))
-        vision.gates["stage3"].data.copy_(new_g)
+        if not args.freeze_gates:
+            delta_g = core.suggest_gate_delta(S, num_experts=vision.num_experts, scale=0.2)
+            new_g = update_gates(vision.gates["stage3"], delta_g.to(device))
+            vision.gates["stage3"].data.copy_(new_g)
 
         if step % 5 == 0:
             acc = correct / total if total > 0 else 0.0

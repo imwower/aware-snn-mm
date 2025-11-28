@@ -118,14 +118,23 @@ def train_epoch(
         surprise_list.append(S.mean().item())
 
         # reward and R-STDP on classifier
-        R = compute_reward(pred, labels, S)
+        R = compute_reward(pred, labels, reward_scale=args.reward_scale)
+        pre_spikes = z_core
+        post_spikes = cls_spikes[-1]
+        if args.normalize_core:
+            pre_spikes = pre_spikes / (pre_spikes.norm(dim=1, keepdim=True) + 1e-8)
+        if args.post_agg == "mean":
+            post_spikes = cls_spikes.mean(dim=0)
+        elif args.post_agg == "max":
+            post_spikes = cls_spikes.max(dim=0).values
+
         traces["elig_cls"], traces["pre_cls"], traces["post_cls"], upd = rstdp_update_linear(
             core.classifier.weight,
             traces["elig_cls"],
             traces["pre_cls"],
             traces["post_cls"],
-            pre_spikes=z_core,  # use averaged spikes as pre
-            post_spikes=cls_spikes[-1],  # last timestep spikes for stronger signal
+            pre_spikes=pre_spikes,
+            post_spikes=post_spikes,
             reward=R,
             lr=args.lr_cls,
         )
